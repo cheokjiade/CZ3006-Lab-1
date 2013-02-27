@@ -205,7 +205,7 @@ public class SWP {
         //create new timer and new timertask
         f_timer[seq % NR_BUFS] = new Timer();
         //schedule the  task for execution after 200ms
-        f_timer[seq % NR_BUFS].schedule(new f_task(seq), 500);
+        f_timer[seq % NR_BUFS].schedule(new f_task(seq), 200);
 	}
 
 	private void stop_timer(int seq) {
