@@ -88,8 +88,8 @@ public class SWP {
 	 * ======================================================
 	 */
 	// Our variables
-	boolean no_ack = true; /*no ack has been sent yet */
-	Packet in_buf[] = new Packet[NR_BUFS];
+	boolean no_nak = true; /*no ack has been sent yet */
+	
 	Timer[] f_timer = new Timer[NR_BUFS];
     Timer ack_timer;
 
@@ -107,25 +107,26 @@ public class SWP {
 			Packet[] buffer) {
 		PFrame frame = new PFrame();
 		frame.kind = frame_kind;
-		if (frame.kind == frame.DATA)
+		if (frame.kind == PFrame.DATA)
 			frame.info = buffer[frame_nr % NR_BUFS];
 		frame.seq = frame_nr;
 		frame.ack = (frame_expected + MAX_SEQ) % (MAX_SEQ + 1);
-		if (frame.kind == frame.DATA)
-			no_ack = false;
+		if (frame.kind == PFrame.NAK)
+			no_nak = false;
 		to_physical_layer(frame);
-		if (frame.kind == frame.DATA)
+		if (frame.kind == PFrame.DATA)
 			start_timer(frame_nr);
 		stop_ack_timer();
 	}
 
 	public void protocol6() {
 		init();
+		int ack_expected = 0;
 		int next_frame_to_send = 0;
 		int frame_expected = 0;
-		int ack_expected = 0;
 		int too_far = NR_BUFS;
 		PFrame r = new PFrame();
+		Packet in_buf[] = new Packet[NR_BUFS];
 		boolean arrived[] = new boolean[NR_BUFS];
 		//int nbuffered=0;
 
@@ -146,16 +147,16 @@ public class SWP {
 				break;
 			case (PEvent.FRAME_ARRIVAL): {
 				from_physical_layer(r);
-				if (r.kind == r.DATA) {
-					if((r.seq != frame_expected)&& no_ack)
-						send_frame(r.NAK, 0, frame_expected, out_buf);
+				if (r.kind == PFrame.DATA) {
+					if((r.seq != frame_expected)&& no_nak)
+						send_frame(PFrame.NAK, 0, frame_expected, out_buf);
 					else start_ack_timer();
-					if (between(frame_expected, r.seq, too_far)&& (!arrived[r.seq % NR_BUFS])){
+					if (between(frame_expected, r.seq, too_far)&& (arrived[r.seq % NR_BUFS]==false)){
 						arrived[r.seq % NR_BUFS] = true;
-						in_buf[r.seq%NR_BUFS] = r.info;
+						in_buf[r.seq  %NR_BUFS] = r.info;
 						while(arrived[frame_expected % NR_BUFS]){
 							to_network_layer(in_buf[frame_expected % NR_BUFS]);
-							no_ack = true;
+							no_nak = true;
 							arrived[frame_expected % NR_BUFS] = false;
 							frame_expected = inc(frame_expected);
 							too_far = inc(too_far);
@@ -163,8 +164,8 @@ public class SWP {
 						}
 					}
 				}
-				if((r.kind == r.NAK) && between(ack_expected, (r.ack+1)%(MAX_SEQ+1),next_frame_to_send))
-					send_frame(r.DATA, (r.ack+1)%(MAX_SEQ+1), next_frame_to_send, out_buf);
+				if((r.kind == PFrame.NAK) && between(ack_expected, (r.ack + 1)%(MAX_SEQ + 1),next_frame_to_send))
+					send_frame(PFrame.DATA, (r.ack+1)%(MAX_SEQ+1), frame_expected, out_buf);
 				
 				while(between(ack_expected, r.ack, next_frame_to_send)){
 					//nbuffered--;
@@ -175,15 +176,15 @@ public class SWP {
 			}
 				break;
 			case (PEvent.CKSUM_ERR): {
-				if(no_ack)send_frame(r.NAK, 0, frame_expected, out_buf);
+				if(no_nak)send_frame(PFrame.NAK, 0, frame_expected, out_buf);
 			}
 				break;
 			case (PEvent.TIMEOUT): {
-				send_frame(r.DATA, oldest_frame, frame_expected, out_buf);
+				send_frame(PFrame.DATA, oldest_frame, frame_expected, out_buf);
 			}
 				break;
 			case (PEvent.ACK_TIMEOUT): {
-				send_frame(r.ACK, 0, frame_expected, out_buf);
+				send_frame(PFrame.ACK, 0, frame_expected, out_buf);
 			}
 				break;
 			default:
@@ -204,7 +205,7 @@ public class SWP {
         //create new timer and new timertask
         f_timer[seq % NR_BUFS] = new Timer();
         //schedule the  task for execution after 200ms
-        f_timer[seq % NR_BUFS].schedule(new f_task(seq), 200);
+        f_timer[seq % NR_BUFS].schedule(new f_task(seq), 500);
 	}
 
 	private void stop_timer(int seq) {
